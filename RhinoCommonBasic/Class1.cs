@@ -18,22 +18,11 @@ using System.Runtime.InteropServices;
 
 namespace RhinoCommonBasic
 {
+    //ToDo:Transformの推定
     public class Panelling
     {
         public static object Test() {
-            //return new Molds.CubicPolynomial(10, 10, 0.5, 0.4, 0.2, 0.5, 0.2, 0.1).GetSurface();
-            var target= Functions.GetSurfaceFromPoints((u, v) => new Point3d(u * 10, v * 10, Math.Sin(u) + Math.Cos(v)), 15, 15);
-            var status = new PanellingStatus(target);
-            Mold mold1, mold2;
-            status.AddMold(mold1=new Molds.Plane(15, 15));
-            status.AddMold(mold2=new Molds.CubicPolynomial(15, 15, 0, 0, 0, 0, 0, 0));
-            status.AddPanel(new RigidTransformation(-7.5, -7.5, 0, 0, 0, 0), mold1);
-            status.AddPanel(new RigidTransformation(-7.5, 7.5, 0, 0, 0, 0), mold2);
-            status.AddPanel(new RigidTransformation(7.5, -7.5, 0, 0, 0, 0), mold2);
-            status.AddPanel(new RigidTransformation(7.5, 7.5, 0, 0, 0, 0), mold2);
-            status.CurveNetworks.AddRandomPointsOnSurface(target, 10);
-            status.TryOptimizationTransform(1);
-            return status.GetPanels();
+            return 1;
         }
 
         public interface Mold : ParamaterProvider
@@ -158,6 +147,7 @@ namespace RhinoCommonBasic
                 var result = new List<double>();
                 //result.AddRange(TestSurfaceFitting());
                 result.AddRange(TestDivergence());
+                result.AddRange(TestCost());
                 return result.ToArray();
             }
 
