@@ -191,23 +191,92 @@ namespace RhinoCommonBasic
                 List<double> history = new List<double>();
 
                 Matrix BestMatrix = Functions.ArrayToMatrix(Paramaters.ToArray());//不要
-                double BestValue = double.MaxValue;
+                //double BestValue = double.MaxValue;
                 for (int i = 0; i < count; i++)
                 {
                     var paraMatrix = Functions.ArrayToMatrix(Paramaters.ToArray());
                     var test = GetTest();
                     Matrix m = Functions.GaussNewtonMethod(GetJacobian(), Functions.ArrayToMatrix(test), paraMatrix);
-                    m.Scale(Scale);
-                    Paramaters.Init(Functions.MatrixToArray(m + paraMatrix));
+                    //m.Scale(Scale);
+                    //Paramaters.Init(Functions.MatrixToArray(m + paraMatrix));
+                    TryLengthEstimation( Functions.MatrixToArray(paraMatrix), Functions.MatrixToArray(m));
 
                     var sqsum = Functions.GetSquareSum(test);
-                    if (sqsum < BestValue) { BestMatrix = paraMatrix; }
+                    //if (sqsum < BestValue) { BestMatrix = m + paraMatrix; }
                     history.Add(sqsum);
                 }
-                Paramaters.Init(Functions.MatrixToArray(BestMatrix));
+                //Paramaters.Init(Functions.MatrixToArray(BestMatrix));
 
                 return history.ToArray();
+            }
 
+            public void TryLengthEstimation(double[] org,double[] deg)
+            {
+                IParamaters[] paras = Paramaters.GetChildParamaters();
+                int cnt = 0;
+
+                int searchWidthL = 5;
+                int searchWidthN = 3;
+                int searchCountN = 5;
+                foreach (var item in paras)
+                {
+                    double bestScale = 0;
+                    double bestValue = double.MaxValue;
+                    double rangeMax = 1e5;
+                    double rangeMin = 1e-5;
+                    double rangeMaxNew = 1e5;
+                    double rangeMinNew = 1e-5;
+
+                    double searchStep = Math.Pow(10, Math.Log10(rangeMax / rangeMin) / searchWidthL);
+
+                        for (double val = rangeMin; val < rangeMax; val *= searchStep)
+                        {
+                            double scale = val;
+
+                            TryLengthEstimationTestScale(item, scale, cnt, org, deg);
+                            var sqsum = Functions.GetSquareSum(GetTest());
+                            if (sqsum < bestValue)
+                            {
+                                bestValue = sqsum;
+                                bestScale = scale;
+                                rangeMaxNew = scale * Math.Sqrt(searchStep);
+                                rangeMinNew = scale / Math.Sqrt(searchStep);
+                            }
+                        }
+                    rangeMax = rangeMaxNew;
+                    rangeMin = rangeMinNew;
+
+                    for (int i = 0; i < searchCountN; i++) {
+                        for (int j = 0; j <= searchWidthN; j++)
+                        {
+                            double scale = rangeMin + (rangeMax - rangeMin) / searchWidthN * j;
+
+                            TryLengthEstimationTestScale(item, scale, cnt, org, deg);
+                            var sqsum = Functions.GetSquareSum(GetTest());
+                            if (sqsum < bestValue)
+                            {
+                                bestValue = sqsum;
+                                bestScale = scale;
+                                rangeMaxNew = scale + (rangeMax - rangeMin) / searchWidthN / 2.0;
+                                rangeMinNew = scale - (rangeMax - rangeMin) / searchWidthN / 2.0;
+                            }
+                        }
+                        
+                        rangeMax = rangeMaxNew;
+                        rangeMin = rangeMinNew;
+                    }
+                    TryLengthEstimationTestScale(item, bestScale, cnt, org, deg);
+
+                    cnt += item.Count();
+                }
+            }
+
+            protected void TryLengthEstimationTestScale(IParamaters item,double Scale,int cnt,double[] org,double[] deg)
+            {
+                for (int i = 0; i < item.Count(); i++)
+                {
+                    item.Set(i, org[i+cnt]+Scale*deg[i+cnt]);
+                }
             }
 
             public double[] TryOptimizationTransform(int count = 1, double Scale = 1.0)
@@ -237,6 +306,16 @@ namespace RhinoCommonBasic
                 foreach(var cp in controlPoints)
                 {
                     result.Add(Functions.GetPointToSurfaceDistance(cp,TargetSurface));
+                }
+                return result.ToArray();
+            }
+
+            public double[] TestCost()
+            {
+                List<double> result = new List<double>();
+                foreach(var item in this.Transformations)
+                {
+                    result.AddRange(item.Paramaters.ToArray());
                 }
                 return result.ToArray();
             }
@@ -335,6 +414,7 @@ namespace RhinoCommonBasic
             double[] ToArray();
             double Get(int target);
             int Count();
+            IParamaters[] GetChildParamaters();
         }
 
         public class ParamatersCombination : IParamaters
@@ -350,7 +430,7 @@ namespace RhinoCommonBasic
             public double Get(int target)
             {
                 int cnt = 0;
-                foreach (Paramaters item in ParamatersMember)
+                foreach (var item in ParamatersMember)
                 {
                     if (cnt <= target && target < cnt + item.Count())
                     {
@@ -363,10 +443,10 @@ namespace RhinoCommonBasic
 
             public IEnumerator GetEnumerator()
             {
-                foreach (Paramaters item in ParamatersMember)
+                foreach (var item in ParamatersMember)
                 {
-                    var itemArray= item.ToArray();
-                    foreach(var item2 in itemArray)
+                    var itemAr= item.ToArray();
+                    foreach(var item2 in itemAr)
                     {
                         yield return item2;
                     }
@@ -376,7 +456,7 @@ namespace RhinoCommonBasic
             public void Init(params double[] arg)
             {
                 int cnt = 0;
-                foreach (Paramaters item in ParamatersMember)
+                foreach (var item in this.GetChildParamaters())
                 {
                     for(int i = 0; i < item.Count(); i++)
                     {
@@ -402,7 +482,7 @@ namespace RhinoCommonBasic
             public bool Set(int target, double value)
             {
                 int cnt = 0;
-                foreach (Paramaters item in ParamatersMember)
+                foreach (var item in ParamatersMember)
                 {
                     if (cnt <= target && target < cnt + item.Count())
                     {
@@ -417,7 +497,7 @@ namespace RhinoCommonBasic
             public double[] ToArray()
             {
                 List<double> Result = new List<double>();
-                foreach (Paramaters item in ParamatersMember)
+                foreach (var item in ParamatersMember)
                 {
                     Result.AddRange(item.ToArray());
                 }
@@ -432,6 +512,16 @@ namespace RhinoCommonBasic
                     result += item.Count();
                 }
                 return result;
+            }
+
+            public IParamaters[] GetChildParamaters()
+            {
+                List<IParamaters> result = new List<IParamaters>();
+                foreach(var item in this.ParamatersMember)
+                {
+                    result.AddRange(item.GetChildParamaters());
+                }
+                return result.ToArray();
             }
         }
 
@@ -489,6 +579,11 @@ namespace RhinoCommonBasic
             public int Count()
             {
                 return Content.Count();
+            }
+
+            public IParamaters[] GetChildParamaters()
+            {
+                return new IParamaters[] { this };
             }
         }
 
@@ -565,8 +660,10 @@ namespace RhinoCommonBasic
 
             public RigidTransformation(double x,double y,double z,double rx,double ry,double rz)
             {
-                Paramaters = new Paramaters(6);
-                Paramaters.Init(x, y, z, rx, ry, rz);
+                var pc = new ParamatersCombination();
+                pc.Init(new Paramaters(3), new Paramaters(3));
+                pc.Init(x, y, z, rx, ry, rz);
+                Paramaters = pc;
             }
 
             public Transform ToTransform()
